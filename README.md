@@ -2,6 +2,7 @@
 
 - A simpe GUI in Python Tkinter for [Figgiewars](https://www.figgiewars.com/)
 - To run, `python main.py` with least dependencies 
+- `python main.py --testnet` to connect to the testnet
 
 
 ## Status

@@ -87,7 +87,7 @@ class FiggieClient:
         frame = ttk.Frame(self.master)
         frame.pack(padx=10, pady=5)
 
-        columns = ("Suit", "Ask Price", "Aks Player", "Bid Price", "Bid Player")
+        columns = ("Suit", "Bid Price", "Bid Player", "Ask Price", "Ask Player")
         self.tree = ttk.Treeview(frame, columns=columns, show="headings", height=4)
 
         for col in columns:

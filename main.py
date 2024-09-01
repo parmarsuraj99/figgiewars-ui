@@ -87,7 +87,7 @@ class FiggieClient:
         frame = ttk.Frame(self.master)
         frame.pack(padx=10, pady=5)
 
-        columns = ("Suit", "Bid Price", "Bid Player", "Ask Price", "Ask Player")
+        columns = ("Suit", "Ask Price", "Aks Player", "Bid Price", "Bid Player")
         self.tree = ttk.Treeview(frame, columns=columns, show="headings", height=4)
 
         for col in columns:
@@ -426,31 +426,32 @@ class FiggieClient:
 
         self.log_message("Game reset. Ready for a new game.")
 
+
     def handle_end_round(self, round_data):
         self.disable_order_controls()
         self.round_started = False
         self.waiting_label.config(text="Round ended. Waiting for next round...")
-
+        
         # Prepare round results message
         results_message = "--- Round Results ---\n"
         results_message += f"Common Suit: {round_data['common_suit']}\n"
         results_message += f"Goal Suit: {round_data['goal_suit']}\n\n"
-
+        
         results_message += "Final Card Count:\n"
-        for suit, count in round_data["card_count"].items():
+        for suit, count in round_data['card_count'].items():
             results_message += f"{suit.capitalize()}: {count}\n"
-
+        
         results_message += "\nPlayer Inventories:\n"
-        for player in round_data["player_inventories"]:
+        for player in round_data['player_inventories']:
             results_message += f"{player['player_name']}: {player}\n"
-
+        
         results_message += "\nPoints Earned This Round:\n"
-        for player in round_data["player_points"]:
+        for player in round_data['player_points']:
             results_message += f"{player['player_name']}: {player['points']}\n"
-
+        
         # Show popup with round results
         self.show_round_end_popup(results_message)
-
+        
         # Log the results
         self.log_message(results_message)
         self.log_message("Waiting for the next round to start...")
@@ -459,27 +460,23 @@ class FiggieClient:
         self.disable_order_controls()
         self.round_started = False
         self.waiting_label.config(text="Game ended.")
-
+        
         end_game_message = "=== Game Over ===\nFinal Standings:\n"
-
+        
         # Sort players by points in descending order
-        sorted_players = sorted(
-            game_data["player_points"], key=lambda x: x["points"], reverse=True
-        )
-
+        sorted_players = sorted(game_data['player_points'], key=lambda x: x['points'], reverse=True)
+        
         for i, player in enumerate(sorted_players, 1):
-            end_game_message += (
-                f"{i}. {player['player_name']}: {player['points']} points\n"
-            )
-
+            end_game_message += f"{i}. {player['player_name']}: {player['points']} points\n"
+        
         end_game_message += "\nThank you for playing!"
-
+        
         # Log the results
         self.log_message(end_game_message)
-
+        
         # Show popup with game results
         messagebox.showinfo("Game Over", end_game_message)
-
+        
         # Reset the game
         self.reset_game()
 
@@ -515,9 +512,7 @@ class FiggieClient:
             elif data.get("kind") == "end_game":
                 self.handle_end_game(data["data"])
             elif "status" in data and "message" in data:
-                self.log_message(
-                    f"Server message: {data['status']} - {data['message']}"
-                )
+                self.log_message(f"Server message: {data['status']} - {data['message']}")
         except Exception as e:
             self.log_message(f"Error in handle_message: {str(e)}")
 

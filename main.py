@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import messagebox
 from tkinter import ttk, scrolledtext
 import websocket
 import json
@@ -226,44 +227,6 @@ class FiggieClient:
         )
         threading.Thread(target=self.ws.run_forever, daemon=True).start()
 
-    def on_open(self, ws, player_id):
-        self.log_message("WebSocket connection opened")
-        subscribe_message = json.dumps({"action": "subscribe", "playerid": player_id})
-        ws.send(subscribe_message)
-        self.log_message(f"Sent subscription request: {subscribe_message}")
-
-    def on_message(self, ws, message):
-        try:
-            data = json.loads(message)
-            self.log_message(f"Received: {json.dumps(data, indent=2)}")
-            self.handle_message(data)
-        except json.JSONDecodeError:
-            self.log_message(f"Received non-JSON message: {message}")
-        except Exception as e:
-            self.log_message(f"Error handling message: {str(e)}")
-
-    def handle_message(self, data):
-        try:
-            if data.get("kind") == "dealing_cards":
-                self.update_inventory(data["data"])
-                self.enable_order_controls()
-                self.round_started = True
-                self.waiting_label.config(text="Round started!")
-                self.log_message("New round started. Cards dealt.")
-            elif data.get("kind") == "update":
-                self.update_order_book(data["data"])
-                self.handle_trade(data["data"].get("trade"))
-            elif data.get("kind") == "end_round":
-                self.handle_end_round(data["data"])
-            elif data.get("kind") == "end_game":
-                self.handle_end_game(data["data"])
-            elif "status" in data and "message" in data:
-                self.log_message(
-                    f"Server message: {data['status']} - {data['message']}"
-                )
-        except Exception as e:
-            self.log_message(f"Error in handle_message: {str(e)}")
-
     def handle_end_round(self, round_data):
         self.disable_order_controls()
         self.round_started = False
@@ -390,6 +353,21 @@ class FiggieClient:
         except json.JSONDecodeError as e:
             self.log_message(f"Error parsing order response: {str(e)}")
 
+    def show_round_end_popup(self, message):
+        popup = tk.Toplevel(self.master)
+        popup.title("Round Results")
+        popup.geometry("400x300")
+
+        text_widget = scrolledtext.ScrolledText(
+            popup, wrap=tk.WORD, width=50, height=15
+        )
+        text_widget.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
+        text_widget.insert(tk.END, message)
+        text_widget.config(state=tk.DISABLED)
+
+        close_button = ttk.Button(popup, text="Close", command=popup.destroy)
+        close_button.pack(pady=10)
+
     def cancel_order(self):
         suit = self.suit_var.get().lower()
         direction = self.order_type.get()
@@ -422,6 +400,126 @@ class FiggieClient:
             self.log_message(f"Error cancelling order: {str(e)}")
         except json.JSONDecodeError as e:
             self.log_message(f"Error parsing cancellation response: {str(e)}")
+
+    def reset_game(self):
+        # Clear inventory
+        for suit in self.inventory:
+            self.inventory[suit] = 0
+            self.inventory_labels[suit].config(text="0")
+
+        # Clear order book
+        for suit in ["spades", "hearts", "diamonds", "clubs"]:
+            self.tree.item(suit, values=(suit.capitalize(), "-1", "", "-1", ""))
+
+        # Clear trade history
+        self.trade_history.delete("1.0", tk.END)
+
+        # Clear log
+        self.log_text.delete("1.0", tk.END)
+
+        # Reset UI elements
+        self.waiting_label.config(text="Waiting for new game...")
+        self.disable_order_controls()
+        self.suit_var.set("spade")
+        self.price_entry.delete(0, tk.END)
+        self.order_type.set("buy")
+
+        self.log_message("Game reset. Ready for a new game.")
+
+    def handle_end_round(self, round_data):
+        self.disable_order_controls()
+        self.round_started = False
+        self.waiting_label.config(text="Round ended. Waiting for next round...")
+
+        # Prepare round results message
+        results_message = "--- Round Results ---\n"
+        results_message += f"Common Suit: {round_data['common_suit']}\n"
+        results_message += f"Goal Suit: {round_data['goal_suit']}\n\n"
+
+        results_message += "Final Card Count:\n"
+        for suit, count in round_data["card_count"].items():
+            results_message += f"{suit.capitalize()}: {count}\n"
+
+        results_message += "\nPlayer Inventories:\n"
+        for player in round_data["player_inventories"]:
+            results_message += f"{player['player_name']}: {player}\n"
+
+        results_message += "\nPoints Earned This Round:\n"
+        for player in round_data["player_points"]:
+            results_message += f"{player['player_name']}: {player['points']}\n"
+
+        # Show popup with round results
+        self.show_round_end_popup(results_message)
+
+        # Log the results
+        self.log_message(results_message)
+        self.log_message("Waiting for the next round to start...")
+
+    def handle_end_game(self, game_data):
+        self.disable_order_controls()
+        self.round_started = False
+        self.waiting_label.config(text="Game ended.")
+
+        end_game_message = "=== Game Over ===\nFinal Standings:\n"
+
+        # Sort players by points in descending order
+        sorted_players = sorted(
+            game_data["player_points"], key=lambda x: x["points"], reverse=True
+        )
+
+        for i, player in enumerate(sorted_players, 1):
+            end_game_message += (
+                f"{i}. {player['player_name']}: {player['points']} points\n"
+            )
+
+        end_game_message += "\nThank you for playing!"
+
+        # Log the results
+        self.log_message(end_game_message)
+
+        # Show popup with game results
+        messagebox.showinfo("Game Over", end_game_message)
+
+        # Reset the game
+        self.reset_game()
+
+    def on_open(self, ws, player_id):
+        self.log_message("WebSocket connection opened")
+        subscribe_message = json.dumps({"action": "subscribe", "playerid": player_id})
+        ws.send(subscribe_message)
+        self.log_message(f"Sent subscription request: {subscribe_message}")
+
+    def on_message(self, ws, message):
+        try:
+            data = json.loads(message)
+            self.log_message(f"Received: {json.dumps(data, indent=2)}")
+            self.handle_message(data)
+        except json.JSONDecodeError:
+            self.log_message(f"Received non-JSON message: {message}")
+        except Exception as e:
+            self.log_message(f"Error handling message: {str(e)}")
+
+    def handle_message(self, data):
+        try:
+            if data.get("kind") == "dealing_cards":
+                self.update_inventory(data["data"])
+                self.enable_order_controls()
+                self.round_started = True
+                self.waiting_label.config(text="Round started!")
+                self.log_message("New round started. Cards dealt.")
+            elif data.get("kind") == "update":
+                self.update_order_book(data["data"])
+                self.handle_trade(data["data"].get("trade"))
+            elif data.get("kind") == "end_round":
+                self.handle_end_round(data["data"])
+            elif data.get("kind") == "end_game":
+                self.handle_end_game(data["data"])
+            elif "status" in data and "message" in data:
+                self.log_message(
+                    f"Server message: {data['status']} - {data['message']}"
+                )
+        except Exception as e:
+            self.log_message(f"Error in handle_message: {str(e)}")
 
     def on_error(self, ws, error):
         self.log_message(f"WebSocket error: {error}")
